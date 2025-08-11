@@ -67,6 +67,7 @@ clear
 
 function Daftar_Account() {
 #! " "/etc/xray/config.json" | cut -d ' ' -f 2-3 | column -t | sort | uniq
+echo "Account list functionality placeholder"
 }
 
 
