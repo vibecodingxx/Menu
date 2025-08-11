@@ -339,10 +339,13 @@ echo -e "\033[33m Expired in     : $expe \033[0m"
 baris_panjang
 }
 
-
+function Sc_Credit() {
+echo -e "\033[33m Script Credit : @Geo \033[0m "
+}
 
 Banner
 Details_Account
 Link_Json
 Details_Expiry
-Sc_Credit 
+Sc_Credit
+fi 

@@ -94,7 +94,7 @@ clear
 }
 
 function Daftar_Account() {
-#! " "/etc/xray/config.json" | cut -d ' ' -f 2-3 | column -t | sort | uniq
+cat "/etc/xray/config.json" | cut -d ' ' -f 2-3 | column -t | sort | uniq
 }
 
 
@@ -159,4 +159,5 @@ NUMBER_OF_CLIENTS=$(grep -c -E "^### " "/etc/xray/config.json")
     baris_panjang
     send_log
     Sc_Credit
-    fi  
+    fi
+fi  
