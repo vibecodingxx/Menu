@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# ==========================================
+# Test Script for Auto Limit Manager
+# ==========================================
+# This script tests the functionality without making changes
+# ==========================================
+
+echo -e "\033[5;36m┌──────────────────────────────────────────┐\033[0m"
+echo -e "        Auto Limit Manager Test Mode        "
+echo -e "\033[5;36m└──────────────────────────────────────────┘\033[0m"
+echo ""
+
+# Test 1: Check if script exists and is executable
+echo -e "\033[5;32m[TEST 1] Script Validation\033[0m"
+if [[ -f "auto-limit-manager" ]]; then
+    echo -e "  ✅ Main script exists"
+    if [[ -x "auto-limit-manager" ]]; then
+        echo -e "  ✅ Script is executable"
+    else
+        echo -e "  ❌ Script is not executable"
+    fi
+else
+    echo -e "  ❌ Main script not found"
+fi
+
+# Test 2: Check configuration file
+echo -e "\n\033[5;32m[TEST 2] Configuration File\033[0m"
+if [[ -f "auto-limit-config.conf" ]]; then
+    echo -e "  ✅ Configuration file exists"
+    echo -e "  📋 Current settings:"
+    grep -E "^MAX_IP_LIMIT|^QUOTA_GB|^AUTOKILL_INTERVAL" auto-limit-config.conf | while read line; do
+        echo -e "     $line"
+    done
+else
+    echo -e "  ❌ Configuration file not found"
+fi
+
+# Test 3: Check syntax
+echo -e "\n\033[5;32m[TEST 3] Syntax Check\033[0m"
+if bash -n auto-limit-manager 2>/dev/null; then
+    echo -e "  ✅ Script syntax is valid"
+else
+    echo -e "  ❌ Script has syntax errors"
+fi
+
+# Test 4: Check required directories
+echo -e "\n\033[5;32m[TEST 4] Directory Structure\033[0m"
+required_dirs=(
+    "/etc/kyt/limit/ssh/ip"
+    "/etc/ssh"
+    "/etc/vmess"
+    "/etc/vless"
+    "/etc/trojan"
+)
+
+for dir in "${required_dirs[@]}"; do
+    if [[ -d "$dir" ]]; then
+        echo -e "  ✅ $dir exists"
+    else
+        echo -e "  ⚠️  $dir will be created"
+    fi
+done
+
+# Test 5: Check existing users
+echo -e "\n\033[5;32m[TEST 5] User Detection\033[0m"
+
+# SSH users
+ssh_users=$(cat /etc/passwd | grep "/home/" | cut -d":" -f1 2>/dev/null | wc -l)
+echo -e "  📊 SSH users found: $ssh_users"
+
+# Xray users
+if [[ -f "/etc/xray/config.json" ]]; then
+    vmess_users=$(grep -c -E "^### " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    vless_users=$(grep -c -E "^#& " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    trojan_users=$(grep -c -E "^#! " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    
+    echo -e "  📊 VMess users: $vmess_users"
+    echo -e "  📊 VLess users: $vless_users"
+    echo -e "  📊 Trojan users: $trojan_users"
+else
+    echo -e "  ⚠️  Xray config not found"
+fi
+
+# Test 6: Check existing limits
+echo -e "\n\033[5;32m[TEST 6] Current Limits\033[0m"
+
+# IP limits
+if [[ -d "/etc/kyt/limit/ssh/ip" ]]; then
+    ip_limit_count=$(ls /etc/kyt/limit/ssh/ip/ 2>/dev/null | wc -l)
+    echo -e "  📊 Users with IP limits: $ip_limit_count"
+else
+    echo -e "  ⚠️  IP limit directory not found"
+fi
+
+# Quotas
+ssh_quota_count=$(ls /etc/ssh/ 2>/dev/null | grep -v ".ssh.db" | wc -l)
+vmess_quota_count=$(ls /etc/vmess/ 2>/dev/null | wc -l)
+vless_quota_count=$(ls /etc/vless/ 2>/dev/null | wc -l)
+trojan_quota_count=$(ls /etc/trojan/ 2>/dev/null | grep -v ".trojan.db" | wc -l)
+
+echo -e "  📊 SSH quotas: $ssh_quota_count"
+echo -e "  📊 VMess quotas: $vmess_quota_count"
+echo -e "  📊 VLess quotas: $vless_quota_count"
+echo -e "  📊 Trojan quotas: $trojan_quota_count"
+
+# Test 7: Check auto-kill status
+echo -e "\n\033[5;32m[TEST 7] Auto-Kill Status\033[0m"
+if [[ -f "/etc/cron.d/limitssh-ip" ]]; then
+    echo -e "  ✅ Auto-kill cron job exists"
+    echo -e "  📋 Current cron job:"
+    cat /etc/cron.d/limitssh-ip | grep -v "^#" | while read line; do
+        echo -e "     $line"
+    done
+else
+    echo -e "  ⚠️  Auto-kill cron job not found"
+fi
+
+# Test 8: Check tendang script
+echo -e "\n\033[5;32m[TEST 8] Tendang Script\033[0m"
+if [[ -f "/usr/local/sbin/tendang" ]]; then
+    echo -e "  ✅ Tendang script exists"
+    if [[ -x "/usr/local/sbin/tendang" ]]; then
+        echo -e "  ✅ Tendang script is executable"
+    else
+        echo -e "  ❌ Tendang script is not executable"
+    fi
+else
+    echo -e "  ⚠️  Tendang script not found (will be created)"
+fi
+
+# Summary
+echo -e "\n\033[5;36m┌──────────────────────────────────────────┐\033[0m"
+echo -e "              Test Summary                "
+echo -e "\033[5;36m└──────────────────────────────────────────┘\033[0m"
+
+echo -e "\n\033[5;32mReady to run auto-limit-manager!\033[0m"
+echo -e "The script will automatically:"
+echo -e "  • Set IP limits for all users"
+echo -e "  • Set quota limits for all users"
+echo -e "  • Enable auto-kill monitoring"
+echo -e "  • Restart necessary services"
+echo -e ""
+echo -e "\033[5;33mTo run: sudo ./auto-limit-manager\033[0m"
+echo -e "\033[5;33mTo test only: This script (no changes made)\033[0m"
