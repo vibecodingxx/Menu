@@ -1,0 +1,21 @@
+#!/bin/bash
+mulog=$(cekssh)
+date=$(date)
+data=( `ls /etc/kyt/limit/ssh/ip`);
+for user in "${data[@]}"
+do
+iplimit=$(cat /etc/kyt/limit/ssh/ip/$user)
+cekcek=$(echo -e "$mulog" | grep $user | wc -l);
+if [[ $cekcek -gt $iplimit ]]; then
+passwd -l $user
+nais=3
+else
+echo > /dev/null
+fi
+sleep 0.1
+done
+if [[ $nais -gt 1 ]]; then
+send_log > /dev/null & 
+else
+echo > /dev/null
+fi
