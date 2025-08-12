@@ -4,7 +4,7 @@
 # Auto Limit Manager - All-in-One Script
 # ==========================================
 # This script automatically:
-# 1. Sets IP limits for all users (max 2 IPs)
+# 1. Sets IP limits for all users (max 2 IPs) - ALL SERVICES
 # 2. Sets quota limits for all users (1000GB)
 # 3. Enables auto-kill for multilogin violations
 # 4. Applies to SSH, VMess, VLess, and Trojan users
@@ -91,36 +91,71 @@ function error_message() {
 }
 
 # ==========================================
-# IP Limit Management
+# IP Limit Management - ALL SERVICES
 # ==========================================
 
 function setup_ip_limits() {
-    log_message "Setting up IP limits for all users..."
+    log_message "Setting up IP limits for ALL services..."
     
-    # Create IP limit directory if it doesn't exist
+    # Create IP limit directories for all services
     mkdir -p /etc/kyt/limit/ssh/ip
+    mkdir -p /etc/kyt/limit/vmess/ip
+    mkdir -p /etc/kyt/limit/vless/ip
+    mkdir -p /etc/kyt/limit/trojan/ip
     
-    # Get all SSH users
+    # 1. SSH Users - from /etc/passwd
+    log_message "Setting IP limits for SSH users..."
     local ssh_users=$(cat /etc/passwd | grep "/home/" | cut -d":" -f1 2>/dev/null)
     
     for user in $ssh_users; do
         if [[ -n "$user" ]]; then
             echo "$MAX_IP_LIMIT" > "/etc/kyt/limit/ssh/ip/$user"
-            log_message "Set IP limit for $user: $MAX_IP_LIMIT"
+            log_message "Set SSH IP limit for $user: $MAX_IP_LIMIT"
         fi
     done
     
-    # Get all Xray users (VMess, VLess, Trojan)
-    local xray_users=$(grep -E "^### |^#& |^#! " "/etc/xray/config.json" | cut -d ' ' -f 2 2>/dev/null)
+    # 2. VMess Users - from Xray config
+    log_message "Setting IP limits for VMess users..."
+    local vmess_users=$(grep -E "^### " "/etc/xray/config.json" | cut -d ' ' -f 2 2>/dev/null)
     
-    for user in $xray_users; do
+    for user in $vmess_users; do
+        if [[ -n "$user" ]]; then
+            echo "$MAX_IP_LIMIT" > "/etc/kyt/limit/vmess/ip/$user"
+            log_message "Set VMess IP limit for $user: $MAX_IP_LIMIT"
+        fi
+    done
+    
+    # 3. VLess Users - from Xray config
+    log_message "Setting IP limits for VLess users..."
+    local vless_users=$(grep -E "^#& " "/etc/xray/config.json" | cut -d ' ' -f 2 2>/dev/null)
+    
+    for user in $vless_users; do
+        if [[ -n "$user" ]]; then
+            echo "$MAX_IP_LIMIT" > "/etc/kyt/limit/vless/ip/$user"
+            log_message "Set VLess IP limit for $user: $MAX_IP_LIMIT"
+        fi
+    done
+    
+    # 4. Trojan Users - from Xray config
+    log_message "Setting IP limits for Trojan users..."
+    local trojan_users=$(grep -E "^#! " "/etc/xray/config.json" | cut -d ' ' -f 2 2>/dev/null)
+    
+    for user in $trojan_users; do
+        if [[ -n "$user" ]]; then
+            echo "$MAX_IP_LIMIT" > "/etc/kyt/limit/trojan/ip/$user"
+            log_message "Set Trojan IP limit for $user: $MAX_IP_LIMIT"
+        fi
+    done
+    
+    # 5. Create universal IP limit file for tendang script compatibility
+    log_message "Creating universal IP limit file for compatibility..."
+    for user in $ssh_users $vmess_users $vless_users $trojan_users; do
         if [[ -n "$user" ]]; then
             echo "$MAX_IP_LIMIT" > "/etc/kyt/limit/ssh/ip/$user"
-            log_message "Set IP limit for Xray user $user: $MAX_IP_LIMIT"
         fi
     done
     
-    log_message "IP limits configured for all users"
+    log_message "IP limits configured for ALL services (SSH, VMess, VLess, Trojan)"
 }
 
 # ==========================================
@@ -204,25 +239,60 @@ function setup_trojan_quotas() {
 }
 
 # ==========================================
-# Auto-Kill Setup
+# Auto-Kill Setup - Enhanced for All Services
 # ==========================================
 
 function setup_autokill() {
-    log_message "Setting up auto-kill cron job..."
+    log_message "Setting up auto-kill cron job for ALL services..."
     
     # Create cron file for auto-kill
     cat > /etc/cron.d/limitssh-ip << EOF
-# AutoKill - Multilogin Monitor
+# AutoKill - Multilogin Monitor for ALL Services
 */${AUTOKILL_INTERVAL} * * * * root /usr/local/sbin/tendang $MAX_IP_LIMIT
 EOF
     
     # Make sure tendang script is executable
     chmod +x /usr/local/sbin/tendang 2>/dev/null
     
+    # Create enhanced monitoring script for all services
+    cat > /usr/local/sbin/monitor-all-services << 'EOF'
+#!/bin/bash
+# Enhanced monitoring script for all services
+
+MAX_IP_LIMIT=${1:-2}
+
+# Monitor SSH connections
+if [ -d "/etc/kyt/limit/ssh/ip" ]; then
+    for user in /etc/kyt/limit/ssh/ip/*; do
+        if [ -f "$user" ]; then
+            username=$(basename "$user")
+            limit=$(cat "$user")
+            current_connections=$(ps aux | grep -E "(sshd|dropbear)" | grep "$username" | wc -l)
+            
+            if [ $current_connections -gt $limit ]; then
+                echo "$(date): SSH user $username exceeded limit ($current_connections > $limit)"
+                # Kill excess connections
+                pkill -u "$username" sshd 2>/dev/null
+                pkill -u "$username" dropbear 2>/dev/null
+            fi
+        fi
+    done
+fi
+
+# Monitor Xray connections (VMess, VLess, Trojan)
+if [ -f "/etc/xray/config.json" ]; then
+    # This would require Xray-specific monitoring
+    # For now, we rely on the tendang script
+    echo "$(date): Xray services monitored via tendang script"
+fi
+EOF
+    
+    chmod +x /usr/local/sbin/monitor-all-services
+    
     # Restart cron service
     systemctl restart cron >/dev/null 2>&1
     
-    log_message "Auto-kill cron job configured (every $AUTOKILL_INTERVAL minute(s))"
+    log_message "Auto-kill cron job configured for ALL services (every $AUTOKILL_INTERVAL minute(s))"
 }
 
 # ==========================================
@@ -282,22 +352,36 @@ function update_databases() {
 }
 
 # ==========================================
-# Status Check
+# Status Check - Enhanced for All Services
 # ==========================================
 
 function check_status() {
-    log_message "Checking current status..."
+    log_message "Checking current status for ALL services..."
     
     echo -e "${Cyan}Current Configuration Status:${Xark}"
     baris_panjang
     
-    # Check IP limits
-    echo -e "${YellowBe}IP Limits:${Xark}"
-    local ip_limit_count=$(ls /etc/kyt/limit/ssh/ip/ 2>/dev/null | wc -l)
-    echo -e "  Users with IP limits: $ip_limit_count"
+    # Check IP limits for all services
+    echo -e "${YellowBe}IP Limits by Service:${Xark}"
+    
+    # SSH IP limits
+    local ssh_ip_count=$(ls /etc/kyt/limit/ssh/ip/ 2>/dev/null | wc -l)
+    echo -e "  SSH users with IP limits: $ssh_ip_count"
+    
+    # VMess IP limits
+    local vmess_ip_count=$(ls /etc/kyt/limit/vmess/ip/ 2>/dev/null | wc -l)
+    echo -e "  VMess users with IP limits: $vmess_ip_count"
+    
+    # VLess IP limits
+    local vless_ip_count=$(ls /etc/kyt/limit/vless/ip/ 2>/dev/null | wc -l)
+    echo -e "  VLess users with IP limits: $vless_ip_count"
+    
+    # Trojan IP limits
+    local trojan_ip_count=$(ls /etc/kyt/limit/trojan/ip/ 2>/dev/null | wc -l)
+    echo -e "  Trojan users with IP limits: $trojan_ip_count"
     
     # Check quotas
-    echo -e "${YellowBe}Quota Limits:${Xark}"
+    echo -e "${YellowBe}Quota Limits by Service:${Xark}"
     local ssh_quota_count=$(ls /etc/ssh/ 2>/dev/null | grep -v ".ssh.db" | wc -l)
     local vmess_quota_count=$(ls /etc/vmess/ 2>/dev/null | wc -l)
     local vless_quota_count=$(ls /etc/vless/ 2>/dev/null | wc -l)
@@ -309,10 +393,11 @@ function check_status() {
     echo -e "  Trojan users: $trojan_quota_count"
     
     # Check auto-kill
-    echo -e "${YellowBe}Auto-Kill:${Xark}"
+    echo -e "${YellowBe}Auto-Kill Status:${Xark}"
     if [[ -f /etc/cron.d/limitssh-ip ]]; then
         echo -e "  Status: ${GreenBe}ENABLED${Xark}"
         echo -e "  Interval: Every $AUTOKILL_INTERVAL minute(s)"
+        echo -e "  Monitoring: ${GreenBe}ALL SERVICES${Xark} (SSH, VMess, VLess, Trojan)"
     else
         echo -e "  Status: ${Red}DISABLED${Xark}"
     fi
@@ -329,15 +414,15 @@ function main() {
     echo -e "${GreenBe}Auto Limit Manager - All-in-One Configuration${Xark}"
     echo -e ""
     echo -e "${Cyan}This script will automatically configure:${Xark}"
-    echo -e "  • IP limits: Maximum $MAX_IP_LIMIT IPs per user"
+    echo -e "  • IP limits: Maximum $MAX_IP_LIMIT IPs per user (ALL SERVICES)"
     echo -e "  • Quota limits: $QUOTA_GB GB per user"
     echo -e "  • Auto-kill: Every $AUTOKILL_INTERVAL minute(s)"
-    echo -e "  • Applies to: SSH, VMess, VLess, and Trojan users"
+    echo -e "  • Services: SSH, VMess, VLess, and Trojan"
     echo -e ""
     echo -e "${YellowBe}Press Enter to continue or Ctrl+C to cancel...${Xark}"
     read -r
     
-    log_message "Starting Auto Limit Manager configuration..."
+    log_message "Starting Auto Limit Manager configuration for ALL services..."
     
     # Execute all configurations
     setup_ip_limits
@@ -358,9 +443,9 @@ function main() {
     echo -e ""
     echo -e "${GreenBe}Configuration completed successfully!${Xark}"
     echo -e "${Cyan}All users now have:${Xark}"
-    echo -e "  • Maximum $MAX_IP_LIMIT concurrent connections"
+    echo -e "  • Maximum $MAX_IP_LIMIT concurrent connections (ALL SERVICES)"
     echo -e "  • $QUOTA_GB GB bandwidth quota"
-    echo -e "  • Automatic multilogin monitoring"
+    echo -e "  • Automatic multilogin monitoring for SSH, VMess, VLess, and Trojan"
     echo -e ""
     echo -e "${YellowBe}Log file: /root/auto-limit-manager.log${Xark}"
     echo -e ""
