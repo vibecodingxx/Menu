@@ -8,6 +8,7 @@
 # 2. Sets quota limits for all users (1000GB)
 # 3. Enables auto-kill for multilogin violations
 # 4. Applies to SSH, VMess, VLess, and Trojan users
+# 5. Runs automatically every 4 hours to check for new users
 # ==========================================
 
 # Color definitions
@@ -30,10 +31,64 @@ GreenBe="\033[5;32m"
 YellowBe="\033[5;33m"
 BlueBe="\033[5;34m"
 
-# Configuration
+# ==========================================
+# CONFIGURATION SECTION - EDIT THESE VALUES
+# ==========================================
+
+# IP Limit Configuration
+# Maximum number of concurrent connections per user
+# This applies to ALL services: SSH, VMess, VLess, and Trojan
 MAX_IP_LIMIT=2
+
+# Quota Configuration  
+# Bandwidth quota in GB for each user
+# This applies to ALL services: SSH, VMess, VLess, and Trojan
 QUOTA_GB=1000
-AUTOKILL_INTERVAL=1  # minutes
+
+# Auto-Kill Configuration
+# How often to check for multilogin violations (in minutes)
+# Monitors ALL services for IP limit violations
+AUTOKILL_INTERVAL=1
+
+# Auto-Limit Manager Schedule
+# How often to run the manager to check for new users (in hours)
+MANAGER_INTERVAL=4
+
+# Service Configuration
+# Set to 1 to enable, 0 to disable for each service
+# All services are enabled by default for comprehensive coverage
+ENABLE_SSH=1
+ENABLE_VMESS=1
+ENABLE_VLESS=1
+ENABLE_TROJAN=1
+
+# Logging Configuration
+# Set to 1 to enable detailed logging, 0 for minimal logging
+VERBOSE_LOGGING=1
+
+# Auto-Restart Configuration
+# Set to 1 to automatically restart services after configuration
+AUTO_RESTART_SERVICES=1
+
+# ==========================================
+# Advanced Configuration
+# ==========================================
+
+# IP Whitelist (comma-separated IPs that are exempt from limits)
+# Example: WHITELIST_IPS="192.168.1.1,10.0.0.1"
+WHITELIST_IPS=""
+
+# Custom quota for specific users (username=quota_in_gb)
+# Example: CUSTOM_QUOTAS="admin=2000,premium=5000"
+CUSTOM_QUOTAS=""
+
+# Custom IP limits for specific users (username=max_ips)
+# Example: CUSTOM_IP_LIMITS="admin=5,premium=10"
+CUSTOM_IP_LIMITS=""
+
+# ==========================================
+# END CONFIGURATION SECTION
+# ==========================================
 
 # Get server name
 nama=$(cat /etc/xray/username 2>/dev/null || echo "Server")
@@ -80,7 +135,9 @@ function log_message() {
     local message="$1"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] $message" >> /root/auto-limit-manager.log
-    echo -e "${GreenBe}[INFO]${Xark} $message"
+    if [[ $VERBOSE_LOGGING -eq 1 ]]; then
+        echo -e "${GreenBe}[INFO]${Xark} $message"
+    fi
 }
 
 function error_message() {
@@ -296,6 +353,29 @@ EOF
 }
 
 # ==========================================
+# Auto-Limit Manager Scheduler Setup
+# ==========================================
+
+function setup_manager_scheduler() {
+    log_message "Setting up Auto-Limit Manager scheduler (every $MANAGER_INTERVAL hours)..."
+    
+    # Create cron file for the manager
+    cat > /etc/cron.d/auto-limit-manager << EOF
+# Auto-Limit Manager - Runs every $MANAGER_INTERVAL hours to check for new users
+0 */${MANAGER_INTERVAL} * * * root /usr/local/sbin/auto-limit-manager --check-only
+EOF
+    
+    # Copy the script to /usr/local/sbin for cron execution
+    cp "$0" /usr/local/sbin/auto-limit-manager
+    chmod +x /usr/local/sbin/auto-limit-manager
+    
+    # Restart cron service
+    systemctl restart cron >/dev/null 2>&1
+    
+    log_message "Auto-Limit Manager scheduler configured (every $MANAGER_INTERVAL hours)"
+}
+
+# ==========================================
 # Service Management
 # ==========================================
 
@@ -402,7 +482,59 @@ function check_status() {
         echo -e "  Status: ${Red}DISABLED${Xark}"
     fi
     
+    # Check manager scheduler
+    echo -e "${YellowBe}Auto-Limit Manager Scheduler:${Xark}"
+    if [[ -f /etc/cron.d/auto-limit-manager ]]; then
+        echo -e "  Status: ${GreenBe}ENABLED${Xark}"
+        echo -e "  Interval: Every $MANAGER_INTERVAL hour(s)"
+        echo -e "  Purpose: Check for new users and apply limits automatically"
+    else
+        echo -e "  Status: ${Red}DISABLED${Xark}"
+    fi
+    
     baris_panjang
+}
+
+# ==========================================
+# Check-Only Mode (for scheduled runs)
+# ==========================================
+
+function run_check_only() {
+    log_message "Running scheduled check for new users..."
+    
+    # Get current user counts
+    local current_ssh_users=$(cat /etc/passwd | grep "/home/" | cut -d":" -f1 2>/dev/null | wc -l)
+    local current_vmess_users=$(grep -c -E "^### " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    local current_vless_users=$(grep -c -E "^#& " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    local current_trojan_users=$(grep -c -E "^#! " "/etc/xray/config.json" 2>/dev/null || echo "0")
+    
+    # Get current limit file counts
+    local current_ssh_limits=$(ls /etc/kyt/limit/ssh/ip/ 2>/dev/null | wc -l)
+    local current_vmess_limits=$(ls /etc/kyt/limit/vmess/ip/ 2>/dev/null | wc -l)
+    local current_vless_limits=$(ls /etc/kyt/limit/vless/ip/ 2>/dev/null | wc -l)
+    local current_trojan_limits=$(ls /etc/kyt/limit/trojan/ip/ 2>/dev/null | wc -l)
+    
+    # Check if we need to update limits
+    local needs_update=false
+    
+    if [[ $current_ssh_users -gt $current_ssh_limits ]] || \
+       [[ $current_vmess_users -gt $current_vmess_limits ]] || \
+       [[ $current_vless_users -gt $current_vless_limits ]] || \
+       [[ $current_trojan_users -gt $current_trojan_limits ]]; then
+        needs_update=true
+    fi
+    
+    if [[ $needs_update == true ]]; then
+        log_message "New users detected, updating limits..."
+        setup_ip_limits
+        setup_ssh_quotas
+        setup_vmess_quotas
+        setup_vless_quotas
+        setup_trojan_quotas
+        log_message "Scheduled update completed successfully"
+    else
+        log_message "No new users detected, no update needed"
+    fi
 }
 
 # ==========================================
@@ -418,6 +550,7 @@ function main() {
     echo -e "  • Quota limits: $QUOTA_GB GB per user"
     echo -e "  • Auto-kill: Every $AUTOKILL_INTERVAL minute(s)"
     echo -e "  • Services: SSH, VMess, VLess, and Trojan"
+    echo -e "  • Auto-scheduler: Every $MANAGER_INTERVAL hour(s) to check for new users"
     echo -e ""
     echo -e "${YellowBe}Press Enter to continue or Ctrl+C to cancel...${Xark}"
     read -r
@@ -431,6 +564,7 @@ function main() {
     setup_vless_quotas
     setup_trojan_quotas
     setup_autokill
+    setup_manager_scheduler
     update_databases
     restart_services
     
@@ -446,6 +580,7 @@ function main() {
     echo -e "  • Maximum $MAX_IP_LIMIT concurrent connections (ALL SERVICES)"
     echo -e "  • $QUOTA_GB GB bandwidth quota"
     echo -e "  • Automatic multilogin monitoring for SSH, VMess, VLess, and Trojan"
+    echo -e "  • Automatic checking every $MANAGER_INTERVAL hour(s) for new users"
     echo -e ""
     echo -e "${YellowBe}Log file: /root/auto-limit-manager.log${Xark}"
     echo -e ""
@@ -460,6 +595,12 @@ function main() {
 if [[ $EUID -ne 0 ]]; then
     echo -e "${Red}This script must be run as root${NC}"
     exit 1
+fi
+
+# Check if this is a scheduled run
+if [[ "$1" == "--check-only" ]]; then
+    run_check_only
+    exit 0
 fi
 
 # Run main function
