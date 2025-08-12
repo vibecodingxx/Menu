@@ -97,40 +97,6 @@ nama=$(cat /etc/xray/username 2>/dev/null || echo "Server")
 # Utility Functions
 # ==========================================
 
-function baris_panjang() {
-    echo -e "${BlueCyan} ——————————————————————————————————— ${Xark}"
-}
-
-function Banner() {
-    clear
-    baris_panjang
-    echo -e "${ungu}           $nama      ${Xark}"
-    baris_panjang
-}
-
-function Loading_Animation() {
-    local duration=2
-    local frames=("██10%" "█████35%" "█████████65%" "█████████████80%" "█████████████████████90%" "█████████████████████████100%")
-    local num_frames=${#frames[@]}
-    
-    for ((i = 0; i < duration; i++)); do
-        clear
-        local index=$((i % num_frames))
-        local color_code=$((31 + i % 7))
-        echo ""
-        echo ""
-        echo -e "\e[1;${color_code}m ${frames[$index]}\e[0m"
-        sleep 0.5
-    done
-}
-
-function Loading_Success() {
-    clear
-    echo -e "\033[5;32mSuccess\033[0m"
-    sleep 1
-    clear
-}
-
 function log_message() {
     local message="$1"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
@@ -438,61 +404,56 @@ function update_databases() {
 function check_status() {
     log_message "Checking current status for ALL services..."
     
-    echo -e "${Cyan}Current Configuration Status:${Xark}"
-    baris_panjang
-    
     # Check IP limits for all services
-    echo -e "${YellowBe}IP Limits by Service:${Xark}"
+    log_message "IP Limits by Service:"
     
     # SSH IP limits
     local ssh_ip_count=$(ls /etc/kyt/limit/ssh/ip/ 2>/dev/null | wc -l)
-    echo -e "  SSH users with IP limits: $ssh_ip_count"
+    log_message "SSH users with IP limits: $ssh_ip_count"
     
     # VMess IP limits
     local vmess_ip_count=$(ls /etc/kyt/limit/vmess/ip/ 2>/dev/null | wc -l)
-    echo -e "  VMess users with IP limits: $vmess_ip_count"
+    log_message "VMess users with IP limits: $vmess_ip_count"
     
     # VLess IP limits
     local vless_ip_count=$(ls /etc/kyt/limit/vless/ip/ 2>/dev/null | wc -l)
-    echo -e "  VLess users with IP limits: $vless_ip_count"
+    log_message "VLess users with IP limits: $vless_ip_count"
     
     # Trojan IP limits
     local trojan_ip_count=$(ls /etc/kyt/limit/trojan/ip/ 2>/dev/null | wc -l)
-    echo -e "  Trojan users with IP limits: $trojan_ip_count"
+    log_message "Trojan users with IP limits: $trojan_ip_count"
     
     # Check quotas
-    echo -e "${YellowBe}Quota Limits by Service:${Xark}"
+    log_message "Quota Limits by Service:"
     local ssh_quota_count=$(ls /etc/ssh/ 2>/dev/null | grep -v ".ssh.db" | wc -l)
     local vmess_quota_count=$(ls /etc/vmess/ 2>/dev/null | wc -l)
     local vless_quota_count=$(ls /etc/vless/ 2>/dev/null | wc -l)
     local trojan_quota_count=$(ls /etc/trojan/ 2>/dev/null | grep -v ".trojan.db" | wc -l)
     
-    echo -e "  SSH users: $ssh_quota_count"
-    echo -e "  VMess users: $vmess_quota_count"
-    echo -e "  VLess users: $vless_quota_count"
-    echo -e "  Trojan users: $trojan_quota_count"
+    log_message "SSH users: $ssh_quota_count"
+    log_message "VMess users: $vmess_quota_count"
+    log_message "VLess users: $vless_quota_count"
+    log_message "Trojan users: $trojan_quota_count"
     
     # Check auto-kill
-    echo -e "${YellowBe}Auto-Kill Status:${Xark}"
+    log_message "Auto-Kill Status:"
     if [[ -f /etc/cron.d/limitssh-ip ]]; then
-        echo -e "  Status: ${GreenBe}ENABLED${Xark}"
-        echo -e "  Interval: Every $AUTOKILL_INTERVAL minute(s)"
-        echo -e "  Monitoring: ${GreenBe}ALL SERVICES${Xark} (SSH, VMess, VLess, Trojan)"
+        log_message "Status: ENABLED"
+        log_message "Interval: Every $AUTOKILL_INTERVAL minute(s)"
+        log_message "Monitoring: ALL SERVICES (SSH, VMess, VLess, Trojan)"
     else
-        echo -e "  Status: ${Red}DISABLED${Xark}"
+        log_message "Status: DISABLED"
     fi
     
     # Check manager scheduler
-    echo -e "${YellowBe}Auto-Limit Manager Scheduler:${Xark}"
+    log_message "Auto-Limit Manager Scheduler:"
     if [[ -f /etc/cron.d/auto-limit-manager ]]; then
-        echo -e "  Status: ${GreenBe}ENABLED${Xark}"
-        echo -e "  Interval: Every $MANAGER_INTERVAL hour(s)"
-        echo -e "  Purpose: Check for new users and apply limits automatically"
+        log_message "Status: ENABLED"
+        log_message "Interval: Every $MANAGER_INTERVAL hour(s)"
+        log_message "Purpose: Check for new users and apply limits automatically"
     else
-        echo -e "  Status: ${Red}DISABLED${Xark}"
+        log_message "Status: DISABLED"
     fi
-    
-    baris_panjang
 }
 
 # ==========================================
@@ -542,19 +503,6 @@ function run_check_only() {
 # ==========================================
 
 function main() {
-    Banner
-    echo -e "${GreenBe}Auto Limit Manager - All-in-One Configuration${Xark}"
-    echo -e ""
-    echo -e "${Cyan}This script will automatically configure:${Xark}"
-    echo -e "  • IP limits: Maximum $MAX_IP_LIMIT IPs per user (ALL SERVICES)"
-    echo -e "  • Quota limits: $QUOTA_GB GB per user"
-    echo -e "  • Auto-kill: Every $AUTOKILL_INTERVAL minute(s)"
-    echo -e "  • Services: SSH, VMess, VLess, and Trojan"
-    echo -e "  • Auto-scheduler: Every $MANAGER_INTERVAL hour(s) to check for new users"
-    echo -e ""
-    echo -e "${YellowBe}Press Enter to continue or Ctrl+C to cancel...${Xark}"
-    read -r
-    
     log_message "Starting Auto Limit Manager configuration for ALL services..."
     
     # Execute all configurations
@@ -568,23 +516,18 @@ function main() {
     update_databases
     restart_services
     
-    Loading_Animation
-    Loading_Success
-    
     # Show final status
     check_status
     
-    echo -e ""
-    echo -e "${GreenBe}Configuration completed successfully!${Xark}"
-    echo -e "${Cyan}All users now have:${Xark}"
-    echo -e "  • Maximum $MAX_IP_LIMIT concurrent connections (ALL SERVICES)"
-    echo -e "  • $QUOTA_GB GB bandwidth quota"
-    echo -e "  • Automatic multilogin monitoring for SSH, VMess, VLess, and Trojan"
-    echo -e "  • Automatic checking every $MANAGER_INTERVAL hour(s) for new users"
-    echo -e ""
-    echo -e "${YellowBe}Log file: /root/auto-limit-manager.log${Xark}"
-    echo -e ""
-    baris_panjang
+    log_message "Configuration completed successfully!"
+    log_message "All users now have:"
+    log_message "  • Maximum $MAX_IP_LIMIT concurrent connections (ALL SERVICES)"
+    log_message "  • $QUOTA_GB GB bandwidth quota"
+    log_message "  • Automatic multilogin monitoring for SSH, VMess, VLess, and Trojan"
+    log_message "  • Automatic checking every $MANAGER_INTERVAL hour(s) for new users"
+    log_message "Log file: /root/auto-limit-manager.log"
+    
+    log_message "Auto Limit Manager setup complete. Exiting..."
 }
 
 # ==========================================
@@ -593,7 +536,7 @@ function main() {
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
-    echo -e "${Red}This script must be run as root${NC}"
+    error_message "This script must be run as root"
     exit 1
 fi
 
@@ -605,3 +548,4 @@ fi
 
 # Run main function
 main
+exit 0
